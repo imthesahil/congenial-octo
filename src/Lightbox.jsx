@@ -6,7 +6,7 @@ export default function Lightbox({ url, onClose }) {
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 bg-black flex items-center justify-center"
+      className="anim-fade fixed inset-0 z-50 bg-black flex items-center justify-center"
     >
       <button className="absolute top-4 right-4 p-2 bg-white/10 rounded-full">
         <X size={22} />

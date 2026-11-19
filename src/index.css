@@ -28,16 +28,6 @@ body {
   color: #fff;
 }
 
-.font-love {
-  font-family: 'Dancing Script', cursive;
-}
-
-.chat-bg {
-  background-color: var(--color-black);
-  background-image: url('/love-bg.svg');
-  background-size: 220px;
-}
-
 :root[data-theme='light'] {
   --color-black: #fff6f9;
   --color-white: #3a1626;
@@ -50,3 +40,40 @@ body {
   --color-neutral-300: #5e2c42;
   --color-blue-500: #e8336d;
 }
+
+.font-love { font-family: 'Dancing Script', cursive; }
+
+.chat-bg {
+  background-color: var(--color-black);
+  background-image: url('/love-bg.svg');
+  background-size: 220px;
+}
+
+button, label {
+  transition: transform 0.12s ease, opacity 0.2s ease, background-color 0.2s ease;
+}
+button:active:not(:disabled) { transform: scale(0.96); }
+
+.theme-anim, .theme-anim * {
+  transition: background-color 0.35s, color 0.35s, border-color 0.35s !important;
+}
+
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slide-up { from { transform: translateY(40px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes slide-in { from { transform: translateX(28px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes pop { from { transform: scale(0.9); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes msg-in { from { transform: translateY(8px) scale(0.97); opacity: 0 } to { transform: none; opacity: 1 } }
+
+.anim-fade { animation: fade-in 0.2s ease-out; }
+.anim-sheet { animation: slide-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.anim-slide { animation: slide-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.anim-pop { animation: pop 0.15s ease-out; transform-origin: top right; }
+.anim-msg { animation: msg-in 0.22s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

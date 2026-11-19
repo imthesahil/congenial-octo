@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MessageSquare, Image, CalendarDays, UserCircle, Heart, Sun, Moon } from 'lucide-react'
 import { supabase } from './supabase'
 import Avatar from './Avatar'
@@ -25,28 +25,18 @@ const DAY = 24 * 60 * 60 * 1000
 
 const fmtSeen = (iso) => {
   const d = new Date(iso)
-  const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return d.toDateString() === new Date().toDateString()
-    ? `today at ${t}`
-    : `${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} at ${t}`
+  const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const today = new Date()
+  const yest = new Date()
+  yest.setDate(today.getDate() - 1)
+  if (d.toDateString() === today.toDateString()) return `today at ${t}`
+  if (d.toDateString() === yest.toDateString()) return `yesterday at ${t}`
+  return d.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 export default function Shell({ session }) {
   const me = session.user.email.split('@')[0]
   const other = me === 'manjula' ? 'sahil' : 'manjula'
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark')
-
-  useEffect(() => {
-    localStorage.setItem('theme', theme)
-    document.documentElement.dataset.theme = theme
-    const meta = document.querySelector('meta[name="theme-color"]')
-    meta?.setAttribute('content', theme === 'light' ? '#fff6f9' : '#15070d')
-    return () => {
-      delete document.documentElement.dataset.theme
-      meta?.setAttribute('content', '#15070d')
-    }
-  }, [theme])
-
   const [tab, setTab] = useState('chats')
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([])
@@ -55,12 +45,32 @@ export default function Shell({ session }) {
   const [online, setOnline] = useState(false)
   const [typing, setTyping] = useState(false)
   const [lastSeen, setLastSeen] = useState(null)
+  const [theme, setTheme] = useState(localStorage.getItem('ow-theme') || 'light')
   const roomRef = useRef(null)
   const lastTypingSent = useRef(0)
 
   useOverlay(open, () => setOpen(false))
   useOverlay(menu, () => setMenu(false))
   useOverlay(tab !== 'chats', () => setTab('chats'))
+
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    const meta = document.querySelector('meta[name="theme-color"]')
+    root.classList.add('theme-anim')
+    root.dataset.theme = theme
+    localStorage.setItem('ow-theme', theme)
+    meta?.setAttribute('content', theme === 'light' ? '#fff6f9' : '#15070d')
+    const t = setTimeout(() => root.classList.remove('theme-anim'), 400)
+    return () => clearTimeout(t)
+  }, [theme])
+
+  useLayoutEffect(
+    () => () => {
+      delete document.documentElement.dataset.theme
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#15070d')
+    },
+    []
+  )
 
   const addMessage = (msg) =>
     setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
@@ -76,16 +86,19 @@ export default function Shell({ session }) {
     supabase
       .from('messages')
       .select('*')
-      .order('created_at', { ascending: true })
-      .then(({ data }) => setMessages(data || []))
+      .order('created_at', { ascending: false })
+      .limit(300)
+      .then(({ data }) => setMessages((data || []).reverse()))
 
     const msgChannel = supabase
       .channel('messages')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
-        (payload) => addMessage(payload.new)
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (p) => {
+        if (p.eventType === 'INSERT') addMessage(p.new)
+        else if (p.eventType === 'UPDATE')
+          setMessages((prev) => prev.map((m) => (m.id === p.new.id ? p.new : m)))
+        else if (p.eventType === 'DELETE')
+          setMessages((prev) => prev.filter((m) => m.id !== p.old.id))
+      })
       .subscribe()
 
     loadStatuses()
@@ -119,6 +132,7 @@ export default function Shell({ session }) {
       loadLastSeen()
     }, 30000)
     document.addEventListener('visibilitychange', beat)
+    window.addEventListener('pagehide', beat)
 
     let typingTimer
     const room = supabase.channel('room', { config: { presence: { key: me } } })
@@ -126,6 +140,12 @@ export default function Shell({ session }) {
       .on('presence', { event: 'sync' }, () => {
         setOnline(!!room.presenceState()[other])
         loadLastSeen()
+      })
+      .on('presence', { event: 'leave' }, ({ key }) => {
+        if (key !== other) return
+        const now = new Date().toISOString()
+        setLastSeen(now)
+        supabase.from('last_seen').upsert({ username: other, seen_at: now })
       })
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
         if (payload.user !== other) return
@@ -142,6 +162,7 @@ export default function Shell({ session }) {
       clearInterval(timer)
       clearTimeout(typingTimer)
       document.removeEventListener('visibilitychange', beat)
+      window.removeEventListener('pagehide', beat)
       supabase.removeChannel(room)
     }
   }, [])
@@ -179,6 +200,7 @@ export default function Shell({ session }) {
     : lastSeen
     ? `last seen ${fmtSeen(lastSeen)}`
     : ''
+
   const myStatus = getStatus(me)
   const otherStatus = getStatus(other)
   const last = messages[messages.length - 1]
@@ -201,7 +223,7 @@ export default function Shell({ session }) {
 
           {menu && <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />}
           {menu && (
-            <div className="absolute right-4 top-14 z-20 w-44 bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
+            <div className="anim-pop absolute right-4 top-14 z-20 w-44 bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-lg">
               {Object.entries(STATUSES).map(([k, s]) => (
                 <button
                   key={k}
@@ -224,78 +246,75 @@ export default function Shell({ session }) {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {tab === 'chats' && (
-            <>
-
-              {(
-                <button
-                  onClick={() => setOpen(true)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-900 text-left"
-                >
-                  <Avatar name={other} size="w-12 h-12" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between">
-                      <span className="font-semibold capitalize">
-                        {other}
-                        {otherStatus && <span className="ml-1">{otherStatus.emoji}</span>}
-                      </span>
-                      {last && (
-                        <span className="text-xs text-neutral-500">
-                          {new Date(last.created_at).toLocaleDateString([], {
-                            day: '2-digit',
-                            month: '2-digit',
-                          })}
-                        </span>
-                      )}
-                    </div>
-                    <p className={`text-xs truncate ${typing ? 'text-blue-500' : 'text-neutral-500'}`}>
-                      {typing
-                        ? 'typing...'
-                        : last
-                        ? `${last.sender === me ? 'You: ' : ''}${last.content || '\u{1F4F7} Photo'}`
-                        : 'Say hi'}
-                    </p>
-                  </div>
-                </button>
-              )}
-            </>
-          )}
-
-          {tab === 'pictures' && <Pictures me={me} />}
-          {tab === 'calendar' && <Calendar me={me} />}
-          {tab === 'account' && (
-            <div className="p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <Avatar name={me} size="w-12 h-12" />
-                <span className="font-semibold capitalize">{me}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Theme</span>
-                <div className="flex bg-neutral-900 rounded-full p-1">
-                  {[
-                    ['dark', Moon],
-                    ['light', Sun],
-                  ].map(([t, Icon]) => (
-                    <button
-                      key={t}
-                      onClick={() => setTheme(t)}
-                      className={`px-3 py-1 rounded-full text-sm capitalize flex items-center gap-1 ${
-                        theme === t ? 'bg-blue-600' : 'text-neutral-400'
-                      }`}
-                    >
-                      <Icon size={14} /> {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          <div key={tab} className="anim-fade">
+            {tab === 'chats' && (
               <button
-                onClick={() => supabase.auth.signOut()}
-                className="w-full border border-neutral-700 rounded-lg py-2 text-sm"
+                onClick={() => setOpen(true)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-900 text-left"
               >
-                Logout
+                <Avatar name={other} size="w-12 h-12" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between">
+                    <span className="font-semibold capitalize">
+                      {other}
+                      {otherStatus && <span className="ml-1">{otherStatus.emoji}</span>}
+                    </span>
+                    {last && (
+                      <span className="text-xs text-neutral-500">
+                        {new Date(last.created_at).toLocaleDateString([], {
+                          day: '2-digit',
+                          month: '2-digit',
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <p className={`text-xs truncate ${typing ? 'text-blue-500' : 'text-neutral-500'}`}>
+                    {typing
+                      ? 'typing...'
+                      : last
+                      ? `${last.sender === me ? 'You: ' : ''}${last.content || '\u{1F4F7} Photo'}`
+                      : 'Say hi'}
+                  </p>
+                </div>
               </button>
-            </div>
-          )}
+            )}
+
+            {tab === 'pictures' && <Pictures me={me} />}
+            {tab === 'calendar' && <Calendar me={me} />}
+            {tab === 'account' && (
+              <div className="p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <Avatar name={me} size="w-12 h-12" />
+                  <span className="font-semibold capitalize">{me}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Theme</span>
+                  <div className="flex bg-neutral-900 rounded-full p-1">
+                    {[
+                      ['light', Sun],
+                      ['dark', Moon],
+                    ].map(([t, Icon]) => (
+                      <button
+                        key={t}
+                        onClick={() => setTheme(t)}
+                        className={`px-3 py-1 rounded-full text-sm capitalize flex items-center gap-1 ${
+                          theme === t ? 'bg-blue-600' : 'text-neutral-400'
+                        }`}
+                      >
+                        <Icon size={14} /> {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={() => supabase.auth.signOut()}
+                  className="w-full border border-neutral-700 rounded-lg py-2 text-sm"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <nav className="flex border-t border-neutral-800 pb-[env(safe-area-inset-bottom)]">
@@ -323,6 +342,7 @@ export default function Shell({ session }) {
             subtitle={subtitle}
             sendTyping={sendTyping}
             messages={messages}
+            setMessages={setMessages}
             addMessage={addMessage}
             onBack={() => setOpen(false)}
           />
@@ -337,3 +357,4 @@ export default function Shell({ session }) {
     </div>
   )
 }
+

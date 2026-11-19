@@ -144,12 +144,12 @@ export default function Calendar({ me }) {
 
       {selected && (
         <div
-          className="fixed inset-0 z-40 bg-black/60 flex items-end md:items-center justify-center"
+          className="anim-fade fixed inset-0 z-40 bg-black/60 flex items-end md:items-center justify-center"
           onClick={closeSheet}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-neutral-900 rounded-t-2xl md:rounded-2xl max-h-[85dvh] flex flex-col pb-[env(safe-area-inset-bottom)]"
+            className="anim-sheet w-full max-w-md bg-neutral-900 rounded-t-2xl md:rounded-2xl max-h-[85dvh] flex flex-col pb-[env(safe-area-inset-bottom)]"
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
               <p className="font-semibold">

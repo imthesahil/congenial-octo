@@ -24,7 +24,7 @@ function Viewer({ p, me, onClose, onDelete }) {
   }, [])
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="anim-fade fixed inset-0 z-50 bg-black flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="flex justify-between p-3">
         <button onClick={onClose} className="p-2 bg-white/10 rounded-full">
           <X size={22} />
