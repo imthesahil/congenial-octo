@@ -1,11 +1,38 @@
 @import "tailwindcss";
 
+@theme {
+  --color-black: #15070d;
+  --color-neutral-900: #26101a;
+  --color-neutral-800: #3a1a28;
+  --color-neutral-700: #55283b;
+  --color-neutral-600: #7a4057;
+  --color-neutral-500: #b68a9b;
+  --color-neutral-400: #d3aebd;
+  --color-neutral-300: #e7cbd6;
+  --color-blue-500: #ff5c8a;
+  --color-blue-600: #e8336d;
+}
+
 html, body, #root { height: 100%; }
 
 body {
-  background: #000;
+  background: var(--color-black);
   overscroll-behavior: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
+}
+
+.bg-blue-600 {
+  background-image: linear-gradient(135deg, #ff6b95, #e8336d);
+}
+
+.font-love {
+  font-family: 'Dancing Script', cursive;
+}
+
+.chat-bg {
+  background-color: var(--color-black);
+  background-image: url('/love-bg.svg');
+  background-size: 220px;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MessageSquare, Image, CalendarDays, UserCircle } from 'lucide-react'
+import { MessageSquare, Image, CalendarDays, UserCircle, Heart } from 'lucide-react'
 import { supabase } from './supabase'
 import Avatar from './Avatar'
 import ChatPanel from './ChatPanel'
@@ -177,7 +177,9 @@ export default function Shell({ session }) {
         className={`${open ? 'hidden' : 'flex'} md:flex w-full md:w-[340px] flex-col border-r border-neutral-800`}
       >
         <div className="relative px-4 py-4 flex items-center justify-between border-b border-neutral-800">
-          <h1 className="text-xl font-bold">OurWorld</h1>
+          <h1 className="font-love text-3xl flex items-center gap-2">
+            OurWorld <Heart size={18} className="text-pink-500 fill-pink-500" />
+          </h1>
           <button
             onClick={() => setMenu(!menu)}
             className="text-xs border border-neutral-700 rounded-full px-3 py-1 text-neutral-400"
@@ -302,9 +304,9 @@ export default function Shell({ session }) {
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center">
-            <MessageSquare size={64} className="text-neutral-700 mb-4" />
-            <h2 className="font-semibold">Welcome to OurWorld</h2>
-            <p className="text-sm text-neutral-500 mt-1">Select a chat to start messaging</p>
+            <Heart size={64} className="text-pink-500/40 fill-pink-500/20 mb-4" />
+            <h2 className="font-love text-3xl">Welcome to OurWorld</h2>
+            <p className="text-sm text-neutral-500 mt-1">Our little world, just us</p>
           </div>
         )}
       </section>
