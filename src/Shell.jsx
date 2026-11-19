@@ -36,7 +36,6 @@ export default function Shell({ session }) {
   const other = me === 'manjula' ? 'sahil' : 'manjula'
   const [tab, setTab] = useState('chats')
   const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
   const [messages, setMessages] = useState([])
   const [statuses, setStatuses] = useState({})
   const [menu, setMenu] = useState(false)
@@ -169,7 +168,6 @@ export default function Shell({ session }) {
   const myStatus = getStatus(me)
   const otherStatus = getStatus(other)
   const last = messages[messages.length - 1]
-  const showChat = other.includes(search.trim().toLowerCase())
 
   return (
     <div className="h-dvh flex bg-black text-white pt-[env(safe-area-inset-top)]">
@@ -214,15 +212,8 @@ export default function Shell({ session }) {
         <div className="flex-1 overflow-y-auto">
           {tab === 'chats' && (
             <>
-              <div className="p-3">
-                <input
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-base outline-none"
-                  placeholder="Search chats"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              {showChat && (
+
+              {(
                 <button
                   onClick={() => setOpen(true)}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-900 text-left"
