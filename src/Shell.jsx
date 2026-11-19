@@ -47,6 +47,7 @@ export default function Shell({ session }) {
 
   useOverlay(open, () => setOpen(false))
   useOverlay(menu, () => setMenu(false))
+  useOverlay(tab !== 'chats', () => setTab('chats'))
 
   const addMessage = (msg) =>
     setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
