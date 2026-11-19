@@ -26,7 +26,9 @@ export default function App() {
 
   if (!ready) return null
   if (!session) return <Login />
-  if (!pinOk) return <Pin onVerified={() => setPinOk(true)} />
+
+  const needsPin = session.user.email.startsWith('sahil@')
+  if (needsPin && !pinOk) return <Pin onVerified={() => setPinOk(true)} />
 
   return <Shell session={session} />
 }
