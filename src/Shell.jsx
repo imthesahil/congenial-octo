@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MessageSquare, Image, CalendarDays, UserCircle, Heart } from 'lucide-react'
+import { MessageSquare, Image, CalendarDays, UserCircle, Heart, Sun, Moon } from 'lucide-react'
 import { supabase } from './supabase'
 import Avatar from './Avatar'
 import ChatPanel from './ChatPanel'
@@ -34,6 +34,19 @@ const fmtSeen = (iso) => {
 export default function Shell({ session }) {
   const me = session.user.email.split('@')[0]
   const other = me === 'manjula' ? 'sahil' : 'manjula'
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark')
+
+  useEffect(() => {
+    localStorage.setItem('theme', theme)
+    document.documentElement.dataset.theme = theme
+    const meta = document.querySelector('meta[name="theme-color"]')
+    meta?.setAttribute('content', theme === 'light' ? '#fff6f9' : '#15070d')
+    return () => {
+      delete document.documentElement.dataset.theme
+      meta?.setAttribute('content', '#15070d')
+    }
+  }, [theme])
+
   const [tab, setTab] = useState('chats')
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([])
@@ -255,6 +268,25 @@ export default function Shell({ session }) {
               <div className="flex items-center gap-3">
                 <Avatar name={me} size="w-12 h-12" />
                 <span className="font-semibold capitalize">{me}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Theme</span>
+                <div className="flex bg-neutral-900 rounded-full p-1">
+                  {[
+                    ['dark', Moon],
+                    ['light', Sun],
+                  ].map(([t, Icon]) => (
+                    <button
+                      key={t}
+                      onClick={() => setTheme(t)}
+                      className={`px-3 py-1 rounded-full text-sm capitalize flex items-center gap-1 ${
+                        theme === t ? 'bg-blue-600' : 'text-neutral-400'
+                      }`}
+                    >
+                      <Icon size={14} /> {t}
+                    </button>
+                  ))}
+                </div>
               </div>
               <button
                 onClick={() => supabase.auth.signOut()}

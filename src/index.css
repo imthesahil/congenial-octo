@@ -25,6 +25,7 @@ body {
 
 .bg-blue-600 {
   background-image: linear-gradient(135deg, #ff6b95, #e8336d);
+  color: #fff;
 }
 
 .font-love {
@@ -35,4 +36,17 @@ body {
   background-color: var(--color-black);
   background-image: url('/love-bg.svg');
   background-size: 220px;
+}
+
+:root[data-theme='light'] {
+  --color-black: #fff6f9;
+  --color-white: #3a1626;
+  --color-neutral-900: #ffe9f0;
+  --color-neutral-800: #ffd9e5;
+  --color-neutral-700: #f5bccf;
+  --color-neutral-600: #d98ba7;
+  --color-neutral-500: #9a5b73;
+  --color-neutral-400: #7d4259;
+  --color-neutral-300: #5e2c42;
+  --color-blue-500: #e8336d;
 }
