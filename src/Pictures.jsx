@@ -1,26 +1,63 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, X } from 'lucide-react'
 import { supabase } from './supabase'
-import Lightbox from './Lightbox'
+import { resize } from './image'
+import { useOverlay } from './overlay'
 
-const resize = (file, max = 1600) =>
-  new Promise((resolve) => {
-    const img = new window.Image()
-    img.onload = () => {
-      const scale = Math.min(1, max / Math.max(img.width, img.height))
-      const canvas = document.createElement('canvas')
-      canvas.width = img.width * scale
-      canvas.height = img.height * scale
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-      canvas.toBlob(resolve, 'image/jpeg', 0.85)
-    }
-    img.src = URL.createObjectURL(file)
-  })
+const urlCache = new Map()
+let itemsCache = []
+
+const signAll = async (paths) => {
+  const missing = [...new Set(paths)].filter((p) => !urlCache.has(p))
+  if (!missing.length) return
+  const { data } = await supabase.storage.from('pictures').createSignedUrls(missing, 86400)
+  ;(data || []).forEach((s) => s.signedUrl && urlCache.set(s.path, s.signedUrl))
+}
+
+function Viewer({ p, me, onClose, onDelete }) {
+  useOverlay(true, onClose)
+  const [full, setFull] = useState(urlCache.get(p.path))
+
+  useEffect(() => {
+    if (full) return
+    signAll([p.path]).then(() => setFull(urlCache.get(p.path)))
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+      <div className="flex justify-between p-3">
+        <button onClick={onClose} className="p-2 bg-white/10 rounded-full">
+          <X size={22} />
+        </button>
+        {p.uploader === me && (
+          <button onClick={() => onDelete(p)} className="p-2 bg-white/10 rounded-full">
+            <Trash2 size={20} />
+          </button>
+        )}
+      </div>
+      <div className="flex-1 min-h-0 flex items-center justify-center">
+        <img
+          src={full || urlCache.get(p.thumb_path || p.path)}
+          className="max-w-full max-h-full object-contain"
+        />
+      </div>
+      <div className="p-4">
+        {p.caption && <p className="text-sm break-words">{p.caption}</p>}
+        <p className="text-xs text-neutral-400 capitalize">
+          {p.uploader} · {new Date(p.created_at).toLocaleDateString()}
+        </p>
+      </div>
+    </div>
+  )
+}
 
 export default function Pictures({ me }) {
-  const [items, setItems] = useState([])
+  const [items, setItems] = useState(itemsCache)
+  const [loaded, setLoaded] = useState(itemsCache.length > 0)
+  const [limit, setLimit] = useState(30)
   const [drafts, setDrafts] = useState([])
   const [uploading, setUploading] = useState(false)
+  const [optimizing, setOptimizing] = useState(false)
   const [viewer, setViewer] = useState(null)
 
   const load = async () => {
@@ -28,13 +65,12 @@ export default function Pictures({ me }) {
       .from('pictures')
       .select('*')
       .order('created_at', { ascending: false })
-    if (!data?.length) return setItems([])
-    const { data: signed } = await supabase.storage
-      .from('pictures')
-      .createSignedUrls(data.map((p) => p.path), 3600)
-    const urls = {}
-    ;(signed || []).forEach((s) => (urls[s.path] = s.signedUrl))
-    setItems(data.map((p) => ({ ...p, url: urls[p.path] })))
+      .limit(limit)
+    const rows = data || []
+    await signAll(rows.map((p) => p.thumb_path || p.path))
+    itemsCache = rows
+    setItems(rows)
+    setLoaded(true)
   }
 
   useEffect(() => {
@@ -44,7 +80,7 @@ export default function Pictures({ me }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pictures' }, load)
       .subscribe()
     return () => supabase.removeChannel(ch)
-  }, [])
+  }, [limit])
 
   const pick = (e) => {
     const files = Array.from(e.target.files)
@@ -61,15 +97,21 @@ export default function Pictures({ me }) {
   const upload = async () => {
     setUploading(true)
     for (const d of drafts) {
-      const blob = await resize(d.file)
-      const path = `${me}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
-      const { error } = await supabase.storage
-        .from('pictures')
-        .upload(path, blob, { contentType: 'image/jpeg' })
-      if (!error) {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const path = `${me}/${id}.jpg`
+      const thumb_path = `${me}/thumbs/${id}.jpg`
+      const [full, thumb] = await Promise.all([
+        resize(d.file, 1600, 0.8),
+        resize(d.file, 400, 0.7),
+      ])
+      const [a, b] = await Promise.all([
+        supabase.storage.from('pictures').upload(path, full, { contentType: 'image/jpeg' }),
+        supabase.storage.from('pictures').upload(thumb_path, thumb, { contentType: 'image/jpeg' }),
+      ])
+      if (!a.error && !b.error) {
         await supabase
           .from('pictures')
-          .insert({ uploader: me, path, caption: d.caption.trim() || null })
+          .insert({ uploader: me, path, thumb_path, caption: d.caption.trim() || null })
       }
     }
     setDrafts([])
@@ -79,13 +121,34 @@ export default function Pictures({ me }) {
 
   const remove = async (p) => {
     if (!confirm('Delete this picture?')) return
-    await supabase.storage.from('pictures').remove([p.path])
+    setViewer(null)
+    await supabase.storage.from('pictures').remove([p.path, p.thumb_path].filter(Boolean))
     await supabase.from('pictures').delete().eq('id', p.id)
     load()
   }
 
+  const missingThumbs = items.filter((p) => !p.thumb_path)
+
+  const optimize = async () => {
+    setOptimizing(true)
+    for (const p of missingThumbs) {
+      try {
+        await signAll([p.path])
+        const blob = await (await fetch(urlCache.get(p.path))).blob()
+        const thumb = await resize(blob, 400, 0.7)
+        const tpath = `${p.uploader}/thumbs/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+        const { error } = await supabase.storage
+          .from('pictures')
+          .upload(tpath, thumb, { contentType: 'image/jpeg' })
+        if (!error) await supabase.from('pictures').update({ thumb_path: tpath }).eq('id', p.id)
+      } catch {}
+    }
+    setOptimizing(false)
+    load()
+  }
+
   return (
-    <div className="p-3 space-y-4">
+    <div className="p-3 space-y-3">
       {drafts.length === 0 ? (
         <label className="flex items-center justify-center gap-2 bg-blue-600 rounded-xl py-3 text-sm font-medium cursor-pointer">
           <Plus size={18} /> Add pictures
@@ -123,29 +186,50 @@ export default function Pictures({ me }) {
         </div>
       )}
 
-      {items.length === 0 && (
+      {drafts.length === 0 && missingThumbs.length > 0 && (
+        <button
+          onClick={optimize}
+          disabled={optimizing}
+          className="w-full border border-neutral-700 rounded-xl py-2 text-xs text-neutral-300 disabled:opacity-50"
+        >
+          {optimizing ? 'Optimizing...' : `Speed up ${missingThumbs.length} old pictures`}
+        </button>
+      )}
+
+      {loaded && items.length === 0 && (
         <p className="text-neutral-500 text-sm text-center pt-6">No pictures yet</p>
       )}
 
-      {items.map((p) => (
-        <div key={p.id} className="bg-neutral-900 rounded-xl overflow-hidden">
-          <img src={p.url} onClick={() => setViewer(p.url)} className="w-full object-cover" loading="lazy" />
-          <div className="p-3 flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              {p.caption && <p className="text-sm break-words">{p.caption}</p>}
-              <p className="text-xs text-neutral-500 capitalize">
-                {p.uploader} · {new Date(p.created_at).toLocaleDateString()}
-              </p>
+      <div className="grid grid-cols-2 gap-2">
+        {items.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setViewer(p)}
+            className="text-left bg-neutral-900 rounded-xl overflow-hidden"
+          >
+            <div className="aspect-square bg-neutral-800">
+              <img
+                src={urlCache.get(p.thumb_path || p.path)}
+                loading="lazy"
+                decoding="async"
+                className="w-full h-full object-cover"
+              />
             </div>
-            {p.uploader === me && (
-              <button onClick={() => remove(p)} className="text-neutral-500">
-                <Trash2 size={16} />
-              </button>
-            )}
-          </div>
-        </div>
-      ))}
-      {viewer && <Lightbox url={viewer} onClose={() => setViewer(null)} />}
+            {p.caption && <p className="text-xs p-2 truncate">{p.caption}</p>}
+          </button>
+        ))}
+      </div>
+
+      {items.length >= limit && (
+        <button
+          onClick={() => setLimit(limit + 30)}
+          className="w-full border border-neutral-700 rounded-xl py-2 text-sm"
+        >
+          Load more
+        </button>
+      )}
+
+      {viewer && <Viewer p={viewer} me={me} onClose={() => setViewer(null)} onDelete={remove} />}
     </div>
   )
 }
